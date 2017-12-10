@@ -7,12 +7,24 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Random;
 
+/**
+ * The service is for work with files.
+ *
+ * @author Andrei Yunkevich
+ */
 public class FileWorker {
-    public static void createRandomMatrix(int n, int m) {
+
+    /**
+     * Create and record a random matrix in the file.
+     *
+     * @param row matrix rows
+     * @param col matrix columns
+     */
+    public static void createRandomMatrix(int row, int col) {
         Random random = new Random();
         try (FileWriter writer = new FileWriter("data/input/file.txt", false)) {
-            for (int i = 0; i < n; i++) {
-                for (int j = 0; j < m; j++) {
+            for (int i = 0; i < row; i++) {
+                for (int j = 0; j < col; j++) {
                     writer.append(i + "," + j + "," + random.nextInt(10) + "\n");
                 }
             }
@@ -22,13 +34,15 @@ public class FileWorker {
         }
     }
 
+    /**
+     * Record BlockMatrix in the file.
+     *
+     * @param matrix the BlockMatrix
+     */
     public static void outputMatrix(final BlockMatrix matrix) {
-        JavaRDD<MatrixEntry> etries = matrix.toCoordinateMatrix().entries().toJavaRDD();
-        JavaRDD<String> output = etries.map(new Function<MatrixEntry, String>() {
-            public String call(MatrixEntry e) {
-                return String.format("%d,%d,%s", e.i(), e.j(), e.value());
-            }
-        });
+        JavaRDD<MatrixEntry> entries = matrix.toCoordinateMatrix().entries().toJavaRDD();
+        JavaRDD<String> output = entries.map((Function<MatrixEntry, String>)
+                e -> String.format("%d,%d,%s", e.i(), e.j(), e.value()));
         output.saveAsTextFile("data/output1");
     }
 }

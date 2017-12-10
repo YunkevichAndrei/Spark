@@ -10,76 +10,101 @@ import org.apache.spark.mllib.linalg.distributed.MatrixEntry;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * The service is for work with matrix.
+ *
+ * @author Andrei Yunkevich
+ */
 public class MatrixService {
+
+    /**
+     * Convert JavaRDD<String> to JavaRDD<MatrixEntry>.
+     *
+     * @param rdd the string rdd
+     * @return matrixEntry rdd
+     */
     public static JavaRDD<MatrixEntry> rddMatrixEntry(JavaRDD<String> rdd) {
         JavaRDD<MatrixEntry> entries = rdd.map((Function<String, MatrixEntry>) x -> {
-            String[] indeceValue = x.split(",");
-            long i = Long.parseLong(indeceValue[0]);
-            long j = Long.parseLong(indeceValue[1]);
-            double value = Double.parseDouble(indeceValue[2]);
+            String[] entryValues = x.split(",");
+            long i = Long.parseLong(entryValues[0]);
+            long j = Long.parseLong(entryValues[1]);
+            double value = Double.parseDouble(entryValues[2]);
             return new MatrixEntry(i, j, value);
         });
         return entries;
     }
 
+    /**
+     * Create BlockMatrix from file.
+     *
+     * @param sc   the Spark Context
+     * @param file the file with matrix
+     * @return BlockMatrix
+     */
     public static BlockMatrix createBlockMatrixFromFile(final SparkContext sc, final String file) {
         JavaRDD<String> rdd = sc.textFile(file, 1).toJavaRDD();
         JavaRDD<MatrixEntry> entries = rddMatrixEntry(rdd);
-        // Create a CoordinateMatrix from a JavaRDD<MatrixEntry>.
         CoordinateMatrix coordinateMatrix = new CoordinateMatrix(entries.rdd());
-        // Transform the CoordinateMatrix to a BlockMatrix
         BlockMatrix blockMatrix = coordinateMatrix.toBlockMatrix().cache();
-
-        // Validate whether the BlockMatrix is set up properly. Throws an Exception when it is not valid.
-        // Nothing happens if it is valid.
         blockMatrix.validate();
         return blockMatrix;
     }
 
+    /**
+     * Calculating the factorial of a number.
+     *
+     * @param n the number
+     * @return factorial of a number
+     */
     public static long factorial(long n) {
         return n <= 1 ? 1 : n * factorial(n - 1);
     }
 
+    /**
+     * Matrix multiplication by number.
+     *
+     * @param matrix the BlockMatrix
+     * @param number the number
+     * @return BlockMatrix
+     */
     public static BlockMatrix replaceMatrix(final BlockMatrix matrix, double number) {
-        JavaRDD<MatrixEntry> etries = matrix.toCoordinateMatrix().entries().toJavaRDD();
-        JavaRDD<String> output = etries.map((Function<MatrixEntry, String>) e -> String
+        JavaRDD<MatrixEntry> entryJavaRDD = matrix.toCoordinateMatrix().entries().toJavaRDD();
+        JavaRDD<String> output = entryJavaRDD.map((Function<MatrixEntry, String>) e -> String
                 .format("%d,%d,%s", e.i(), e.j(), e.value() * number));
-        JavaRDD<MatrixEntry> entriess = rddMatrixEntry(output);
-        // Create a CoordinateMatrix from a JavaRDD<MatrixEntry>.
-        CoordinateMatrix coordinateMatrix = new CoordinateMatrix(entriess.rdd());
-        // Transform the CoordinateMatrix to a BlockMatrix
+        JavaRDD<MatrixEntry> entries = rddMatrixEntry(output);
+        CoordinateMatrix coordinateMatrix = new CoordinateMatrix(entries.rdd());
         BlockMatrix blockMatrix = coordinateMatrix.toBlockMatrix().cache();
-
-        // Validate whether the BlockMatrix is set up properly. Throws an Exception when it is not valid.
-        // Nothing happens if it is valid.
         blockMatrix.validate();
         return blockMatrix;
     }
 
+    /**
+     * Adding an identity matrix.
+     *
+     * @param matrix the BlockMatrix
+     * @return new BlockMatrix
+     */
     public static BlockMatrix addEye(final BlockMatrix matrix) {
-        JavaRDD<MatrixEntry> etries = matrix.toCoordinateMatrix().entries().toJavaRDD();
-        JavaRDD<String> output = etries.map(new Function<MatrixEntry, String>() {
-            @Override
-            public String call(MatrixEntry e) throws Exception {
-                if (e.i() == e.j())
-                    return String
-                            .format("%d,%d,%s", e.i(), e.j(), e.value() + 1.0);
-                return String
-                        .format("%d,%d,%s", e.i(), e.j(), e.value());
-            }
+        JavaRDD<MatrixEntry> entriesJavaRDD = matrix.toCoordinateMatrix().entries().toJavaRDD();
+        JavaRDD<String> output = entriesJavaRDD.map((Function<MatrixEntry, String>) e -> {
+            if (e.i() == e.j())
+                return String.format("%d,%d,%s", e.i(), e.j(), e.value() + 1.0);
+            return String.format("%d,%d,%s", e.i(), e.j(), e.value());
         });
-        JavaRDD<MatrixEntry> entriess = rddMatrixEntry(output);
-        // Create a CoordinateMatrix from a JavaRDD<MatrixEntry>.
-        CoordinateMatrix coordinateMatrix = new CoordinateMatrix(entriess.rdd());
-        // Transform the CoordinateMatrix to a BlockMatrix
+        JavaRDD<MatrixEntry> entries = rddMatrixEntry(output);
+        CoordinateMatrix coordinateMatrix = new CoordinateMatrix(entries.rdd());
         BlockMatrix blockMatrix = coordinateMatrix.toBlockMatrix().cache();
-
-        // Validate whether the BlockMatrix is set up properly. Throws an Exception when it is not valid.
-        // Nothing happens if it is valid.
         blockMatrix.validate();
         return blockMatrix;
     }
 
+    /**
+     * Power of matrix.
+     *
+     * @param matrix the BlockMatrix
+     * @param n      power
+     * @return new BlockMatrix
+     */
     public static List<BlockMatrix> pow(BlockMatrix matrix, int n) {
         final List<BlockMatrix> blockMatrices = new ArrayList<>();
         blockMatrices.add(matrix);
@@ -90,14 +115,22 @@ public class MatrixService {
         return blockMatrices;
     }
 
-    public static BlockMatrix exp(BlockMatrix matrix, int step) {
-        List<BlockMatrix> powers = pow(matrix, step - 1);
+    /**
+     * Exponent of matrix.
+     *
+     * @param matrix the BlockMatrix
+     * @param step   number of addendum
+     * @return new BlockMatrix
+     */
+    public static BlockMatrix exp(final BlockMatrix matrix, int step) {
+        final List<BlockMatrix> powers = pow(matrix, step - 1);
         BlockMatrix blockMatrix = matrix;
 
         for (int i = 1; i < step; i++) {
             blockMatrix = blockMatrix.add(replaceMatrix(powers.get(i - 1), (1.0 / factorial(i))));
             //System.out.println(blockMatrix.toLocalMatrix().toString());
         }
+        blockMatrix = addEye(blockMatrix);
 
         return blockMatrix;
     }
